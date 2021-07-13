@@ -1,6 +1,10 @@
 ﻿using Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System;
+
 [assembly: FunctionsStartup(typeof(Startup))]
 
 namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor

@@ -19,10 +19,11 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
 
         }
 
-        public ResourceConfiguration(string subscriptionID, string resourceId, DateTime? lastSucessfullRunDateTimeUTC, string lastKnownSaveState)
+        public ResourceConfiguration(string subscriptionID, string rowKey, string resourceId, DateTime? lastSucessfullRunDateTimeUTC, string lastKnownSaveState)
         {
             PartitionKey = SubscriptionID = subscriptionID;
-            RowKey = ResourceID = resourceId;
+            RowKey = rowKey;
+            ResourceID = resourceId;
             LastSucessfullRunDateTimeUTC = lastSucessfullRunDateTimeUTC;
             LastKnownSaveState = lastKnownSaveState;
         }

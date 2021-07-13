@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using LogAnalytics.Client;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Azure.WebJobs;
@@ -16,16 +19,17 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
     public class ResourceChangedMonitorFunction
     {
         private readonly HttpClient _client;
-
+        
         public ResourceChangedMonitorFunction(System.Net.Http.IHttpClientFactory httpClientFactory)
         {
             this._client = httpClientFactory.CreateClient();
+            
         }
 
         [FunctionName("ResourceChangedMonitor")]
-        public async Task<IActionResult> Run([TimerTrigger("0 */5 * * * *")]TimerInfo myTimer, ILogger log)
+        public async Task Run([TimerTrigger("0/5 * * * * *")]TimerInfo myTimer)
         {
-            log.LogInformation($"ResourceChangedMonitor Timer trigger function executed at: {DateTime.UtcNow}");
+            //log.LogInformation($"ResourceChangedMonitor Timer trigger function executed at: {DateTime.UtcNow}");
 
             var creds = new StorageCredentials(Startup.GetEnvironmentVariable("TableStorageAccountName"), Startup.GetEnvironmentVariable("TableStorageAccountKey"));
             var account = new CloudStorageAccount(creds, useHttps: true);
@@ -42,9 +46,11 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
 
             _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-            //ServiceClientCredentials serviceClientCreds = new TokenCredentials(authResult.AccessToken);
 
-            //ResourceGraphClient argClient = new ResourceGraphClient(serviceClientCreds);
+            //Connect to log Analytics
+            LogAnalyticsClient loganalytics = new LogAnalyticsClient(
+                workspaceId: Startup.GetEnvironmentVariable("LogAnalyticsWorkspaceId"),
+                sharedKey: Startup.GetEnvironmentVariable("LogAnalyticsWorkspaceKey"));
 
 
             foreach (var resource in resources)
@@ -60,10 +66,13 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
                 //request.Query = strQuery;
 
 
-                var content = new StringContent(JsonConvert.SerializeObject(
-                        string.Format(Startup.GetEnvironmentVariable("ResourceChangesAPIPostBodyFormat"), resource.ResourceID, startTime, endTime,
-                            Startup.GetEnvironmentVariable("ResourceChangesAPIIncludePropertyChanges")))
-                    , Encoding.UTF8, "application/json");
+                string requestBody = Startup.GetEnvironmentVariable("ResourceChangesAPIPostBodyFormat")
+                    .Replace("{resourceId}", resource.ResourceID)
+                    .Replace("{startTime}", startTime.ToString("u", DateTimeFormatInfo.InvariantInfo))
+                    .Replace("{endTime}", endTime.ToString("u", DateTimeFormatInfo.InvariantInfo))
+                    .Replace("{includePropertyChanges}", Startup.GetEnvironmentVariable("ResourceChangesAPIIncludePropertyChanges"));
+
+                var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
 
                 var response = await _client.PostAsync(Startup.GetEnvironmentVariable("ResourceChangesAPIUrl"), content);
@@ -73,28 +82,94 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
                     GetResourceChangesResponse getResourceChangesResponse = JsonConvert.DeserializeObject<GetResourceChangesResponse>(await response.Content.ReadAsStringAsync());
                     foreach (var change in getResourceChangesResponse.Changes)
                     {
-                        switch(change.changeType)
+                        var logentry = new LogEntry();
+                        logentry.ResourceID = resource.ResourceID;
+                        logentry.DateValue = change.afterSnapshot.timestamp.ToString("u", DateTimeFormatInfo.InvariantInfo);
+                        logentry.BeforeSnapshotId = change.beforeSnapshot.snapshotId;
+                        logentry.AfterSnapshotId = change.afterSnapshot.snapshotId;
+                        bool foundvalidChange = false;
+
+                        foreach (var propertyChanged in change.propertyChanges)
                         {
-                            //TODO Send Change events to log analytics
-                            default:
-                                break;
+                            switch (propertyChanged.propertyName)
+                            {
+                                case "properties.numberOfWorkers":
+                                    logentry.NumberOfWorkersBeforeValue = propertyChanged.beforeValue;
+                                    logentry.NumberOfWorkersAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "sku.capacity":
+                                    logentry.SKUCapacityBeforeValue = propertyChanged.beforeValue;
+                                    logentry.SKUCapacityAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "properties.currentNumberOfWorkers":
+                                    logentry.CurrentNumberOfWorkersBeforeValue = propertyChanged.beforeValue;
+                                    logentry.CurrentNumberOfWorkersAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "sku.name":
+                                    logentry.SKUNameBeforeValue = propertyChanged.beforeValue;
+                                    logentry.SKUNameAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "sku.size":
+                                    logentry.SKUSizeBeforeValue = propertyChanged.beforeValue;
+                                    logentry.SKUSizeAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "properties.currentWorkerSizeId":
+                                    logentry.CurrentWorkerSizeIdBeforeValue = propertyChanged.beforeValue;
+                                    logentry.CurrentWorkerSizeIdAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "properties.currentWorkerSize":
+                                    logentry.CurrentWorkerSizeBeforeValue = propertyChanged.beforeValue;
+                                    logentry.CurrentWorkerSizeAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "properties.workerSizeId":
+                                    logentry.WorkerSizeIdBeforeValue = propertyChanged.beforeValue;
+                                    logentry.WorkerSizeIdAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                case "properties.workerSize":
+                                    logentry.WorkerSizeBeforeValue = propertyChanged.beforeValue;
+                                    logentry.WorkerSizeAfterValue = propertyChanged.afterValue;
+                                    foundvalidChange = true;
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+
+                        if(foundvalidChange)
+                        {
+                            //TODO Post to Log Analytics
+                            await loganalytics.SendLogEntries<LogEntry>(new List<LogEntry>() { logentry }, "resourceChanges", resource.ResourceID).ConfigureAwait(false);
                         }
                     }
 
+                    if (getResourceChangesResponse.Changes.Count > 0)
+                    {
+                        resource.LastKnownSaveState = getResourceChangesResponse.Changes.Last<ResourceChange>().afterSnapshot.snapshotId;
+                        resource.LastSucessfullRunDateTimeUTC = endTime;
+                        await table.ExecuteAsync(TableOperation.Replace(resource));
+                    }
                 }
                 else
                 {
-                    log.LogWarning($"Failed to get information for resource: {resource.ResourceID}");
-                    log.LogWarning($"\tResponse status code: {response.StatusCode}");
-                    log.LogWarning($"\tResponse Reson Phrase: {response.ReasonPhrase}");
+                    //log.LogWarning($"Failed to get information for resource: {resource.ResourceID}");
+                    //log.LogWarning($"\tResponse status code: {response.StatusCode}");
+                    //log.LogWarning($"\tResponse Reson Phrase: {response.ReasonPhrase}");
                 }
                 
 
             }
 
-            log.LogInformation($"ResourceChangedMonitor Timer trigger function Ended at: {DateTime.UtcNow}");
+            //log.LogInformation($"ResourceChangedMonitor Timer trigger function Ended at: {DateTime.UtcNow}");
 
-            return new OkObjectResult("Job Ended Sucessfully");
+            return;
         }
     }
 }
