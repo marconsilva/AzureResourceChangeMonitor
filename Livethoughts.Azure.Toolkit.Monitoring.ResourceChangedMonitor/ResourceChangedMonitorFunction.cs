@@ -27,7 +27,7 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
         }
 
         [FunctionName("ResourceChangedMonitor")]
-        public async Task Run([TimerTrigger("0/5 * * * * *")]TimerInfo myTimer)
+        public async Task Run([TimerTrigger("0 0 8 * * *")]TimerInfo myTimer)
         {
             //log.LogInformation($"ResourceChangedMonitor Timer trigger function executed at: {DateTime.UtcNow}");
 
@@ -139,13 +139,14 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
                                     foundvalidChange = true;
                                     break;
                                 default:
+
+                                    //TODO USER Performing Change
                                     break;
                             }
                         }
 
                         if(foundvalidChange)
                         {
-                            //TODO Post to Log Analytics
                             await loganalytics.SendLogEntries<LogEntry>(new List<LogEntry>() { logentry }, "resourceChanges", resource.ResourceID).ConfigureAwait(false);
                         }
                     }
