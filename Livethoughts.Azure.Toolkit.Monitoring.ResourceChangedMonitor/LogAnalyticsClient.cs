@@ -48,7 +48,7 @@ namespace LogAnalytics.Client
             this.AzureEndpoint = string.IsNullOrEmpty(endPointOverride) ? Consts.AzureCommercialEndpoint : endPointOverride;
             this.WorkspaceId = workspaceId;
             this.SharedKey = sharedKey;
-            this.RequestBaseUrl = $"https://{this.WorkspaceId}.{this.AzureEndpoint}/api/logs?api-version={Consts.ApiVersion}";
+            this.RequestBaseUrl = $"https://{this.WorkspaceId}.{this.AzureEndpoint}/api/logs?api-version={Consts.LogAnalyticsApiVersion}";
 
             this.httpClient = client;
         }

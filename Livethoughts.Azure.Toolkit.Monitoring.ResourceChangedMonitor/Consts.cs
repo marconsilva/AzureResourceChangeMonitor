@@ -8,7 +8,9 @@
         /// <summary>
         /// Log Analytics API Version.
         /// </summary>
-        public const string ApiVersion = "2016-04-01";
+        public const string LogAnalyticsApiVersion = "2016-04-01";
+
+        public const string ActivityLogApiVersion = "2015-04-01";
 
         /// <summary>
         /// Log Analytics Azure Commercial Endpoint.

@@ -27,7 +27,9 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
         }
 
         [FunctionName("ResourceChangedMonitor")]
-        public async Task Run([TimerTrigger("0 0 8 * * *")]TimerInfo myTimer)
+        public async Task Run([TimerTrigger("0 0 8 * * *")] TimerInfo myTimer)
+        //public async Task Run([TimerTrigger("*/5 * * * * *")] TimerInfo myTimer)
+
         {
             //log.LogInformation($"ResourceChangedMonitor Timer trigger function executed at: {DateTime.UtcNow}");
 
@@ -48,23 +50,20 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
 
 
             //Connect to log Analytics
-            LogAnalyticsClient loganalytics = new LogAnalyticsClient(
+            LogAnalyticsClient logAnalytics = new LogAnalyticsClient(
                 workspaceId: Startup.GetEnvironmentVariable("LogAnalyticsWorkspaceId"),
                 sharedKey: Startup.GetEnvironmentVariable("LogAnalyticsWorkspaceKey"));
 
-
+            
             foreach (var resource in resources)
             {
-                DateTime startTime = DateTime.UtcNow.AddDays(-10);
-                if (resource.LastSucessfullRunDateTimeUTC.HasValue)
+                DateTime startTime = DateTime.UtcNow.AddDays(-14);
+                if (resource.LastSucessfullRunDateTimeUTC.HasValue && (DateTime.UtcNow - resource.LastSucessfullRunDateTimeUTC.Value).TotalDays < 14)
                     startTime = resource.LastSucessfullRunDateTimeUTC.Value;
 
                 DateTime endTime = DateTime.UtcNow;
 
-                //QueryRequest request = new QueryRequest();
-                //request.Subscriptions = new List<string>() { resource.s };
-                //request.Query = strQuery;
-
+                ActivityLogClient activityLog = new ActivityLogClient(resource.SubscriptionID);
 
                 string requestBody = Startup.GetEnvironmentVariable("ResourceChangesAPIPostBodyFormat")
                     .Replace("{resourceId}", resource.ResourceID)
@@ -74,6 +73,7 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
 
                 var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
+                //var activityLogEntries = await activityLog.GetLogEntries(accessToken, startTime, endTime, resource.ResourceID);
 
                 var response = await _client.PostAsync(Startup.GetEnvironmentVariable("ResourceChangesAPIUrl"), content);
 
@@ -147,7 +147,7 @@ namespace Livethoughts.Azure.Toolkit.Monitoring.ResourceChangedMonitor
 
                         if(foundvalidChange)
                         {
-                            await loganalytics.SendLogEntries<LogEntry>(new List<LogEntry>() { logentry }, "resourceChanges", resource.ResourceID).ConfigureAwait(false);
+                            await logAnalytics.SendLogEntries<LogEntry>(new List<LogEntry>() { logentry }, "resourceChanges", resource.ResourceID).ConfigureAwait(false);
                         }
                     }
 
